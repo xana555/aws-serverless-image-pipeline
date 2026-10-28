@@ -1,0 +1,14 @@
+# secrets and credentials
+.env
+.aws/
+*.pem
+
+# build artifacts
+*.zip
+.aws-sam/
+__pycache__/
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db

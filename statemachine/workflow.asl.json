@@ -1,0 +1,182 @@
+{
+  "Comment": "Image pipeline: validate, create thumbnail and web size in parallel, save metadata, notify",
+  "StartAt": "ValidateImage",
+  "States": {
+    "ValidateImage": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:eu-north-1:629184998196:function:image-processor",
+        "Payload": {
+          "action": "validate",
+          "bucket.$": "$.bucket",
+          "key.$": "$.key"
+        }
+      },
+      "ResultSelector": { "result.$": "$.Payload" },
+      "ResultPath": "$.validation",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        { "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure" }
+      ],
+      "Next": "CreateVariants"
+    },
+    "CreateVariants": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "CreateThumbnail",
+          "States": {
+            "CreateThumbnail": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "arn:aws:lambda:eu-north-1:629184998196:function:image-processor",
+                "Payload": {
+                  "action": "resize",
+                  "variant": "thumbnail",
+                  "bucket.$": "$.bucket",
+                  "key.$": "$.key"
+                }
+              },
+              "OutputPath": "$.Payload",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                },
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 3,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CreateWebSize",
+          "States": {
+            "CreateWebSize": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "arn:aws:lambda:eu-north-1:629184998196:function:image-processor",
+                "Payload": {
+                  "action": "resize",
+                  "variant": "web",
+                  "bucket.$": "$.bucket",
+                  "key.$": "$.key"
+                }
+              },
+              "OutputPath": "$.Payload",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                },
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 3,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2
+                }
+              ],
+              "End": true
+            }
+          }
+        }
+      ],
+      "ResultPath": "$.variants",
+      "Catch": [
+        { "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure" }
+      ],
+      "Next": "SaveMetadata"
+    },
+    "SaveMetadata": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:eu-north-1:629184998196:function:image-processor",
+        "Payload": {
+          "action": "finalize",
+          "key.$": "$.key",
+          "validation.$": "$.validation.result",
+          "variants.$": "$.variants"
+        }
+      },
+      "ResultSelector": { "result.$": "$.Payload" },
+      "ResultPath": "$.metadata",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        { "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure" }
+      ],
+      "Next": "NotifySuccess"
+    },
+    "NotifySuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:eu-north-1:629184998196:image-pipeline-notifications",
+        "Subject": "Image processed",
+        "Message.$": "States.Format('Image {} was processed successfully.', $.key)"
+      },
+      "End": true
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:eu-north-1:629184998196:image-pipeline-notifications",
+        "Subject": "Image processing FAILED",
+        "Message.$": "States.Format('Image {} failed: {}', $.key, $.error.Cause)"
+      },
+      "Next": "MarkFailed"
+    },
+    "MarkFailed": {
+      "Type": "Fail",
+      "Error": "ImageProcessingFailed",
+      "Cause": "The image could not be processed."
+    }
+  }
+}
