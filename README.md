@@ -187,12 +187,12 @@ saa3-project-s3-destination-bucket/
 │   ├── workflow.png / .svg  
 │   └── delivery-security.png / .svg  
 ├── src/  
-│   ├── presign/app.py        \# returns a pre-signed upload URL  
-│   ├── starter/app.py        \# SQS message \-\> start Step Functions  
-│   └── processor/app.py      \# validate, resize, finalize actions  
+│   ├── presign/app.py       
+│   ├── starter/app.py       
+│   └── processor/app.py      
 ├── statemachine/  
-│   └── workflow.asl.json     \# Step Functions definition  
-└── screenshots/              \# evidence that the deployment works
+│   └── workflow.asl.json       
+└── screenshots/              
 
 ---
 
