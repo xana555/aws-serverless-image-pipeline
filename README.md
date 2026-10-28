@@ -519,11 +519,6 @@ Upload a file that is not an image (for example a PDF or Word document with a `.
 
 ![Direct S3 access denied](screenshots/27-s3-direct-denied.png)
 
-### **11.7 Demo (optional)**
-
-\[ADD LINK TO YOUR DEMO VIDEO HERE\]
-
----
 
 ## **12\. Cost**
 
